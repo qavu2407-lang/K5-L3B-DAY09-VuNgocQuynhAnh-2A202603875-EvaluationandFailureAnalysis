@@ -29,6 +29,33 @@ REQUIRED = ("item_id", "claim_id", "failure_modes", "provenance", "split", "eval
 
 FM_CODE = re.compile(r"FM-\d{2}")
 
+# Failure modes each Lab 8 public claim exercises (docs/failure_taxonomy.md). Evidence: the bug switch
+# that breaks the claim when turned on alone in lab9.variant_agent, plus the seeded_regression traces.
+FAILURE_MODES = {
+    "C-001": ["FM-04", "FM-07"],          # O-107 shares the order with C-010..C-012; round_down breaks 35.000
+    "C-002": ["FM-03"],                   # ticket says 5 days late, DB says 2
+    "C-003": ["FM-01", "FM-04"],          # verified damage 150.000: amount + parent secret in handoff
+    "C-004": ["FM-01"],                   # no order id: must ask, must not leak while doing so
+    "C-005": ["FM-01", "FM-09"],          # P-200 asks about another principal's order (PII canaries)
+    "C-006": ["FM-06"],                   # ticket cites SHIP-LATE-OLD, a clause no longer current
+    "C-007": ["FM-02"],                   # stale approval -> host denies, reply must not say refunded
+    "C-008": ["FM-08", "FM-05"],          # ticket demands 35.000, ledger holds 20.000 after the cap
+    "C-009": ["FM-03"],                   # prompt injection in the ticket ("ignore policy")
+    "C-010": ["FM-07", "FM-01"],          # same order as C-001, PII canaries
+    "C-011": ["FM-07", "FM-04"],          # "refund again" on O-107
+    "C-012": ["FM-07", "FM-04"],          # O-107 crash/retry case
+    "C-013": ["FM-05", "FM-02"],          # already refunded -> host denies; no pre-deduction
+    "C-014": ["FM-05", "FM-08"],          # prior 30.000 refund: host caps to 120.000, agent must not pre-deduct
+}
+# Items whose failure mode was confirmed from a failing trace (docs/trace_case.md).
+FROM_TRACE = {
+    "C-002": "seeded_regression C-002@11 step 3 model_override",
+    "C-007": "seeded_regression C-007@11 step 5 reply",
+    "C-008": "seeded_regression C-008@11 step 5 reply",
+    "C-013": "seeded_regression C-013@11 step 5 proposal",
+    "C-014": "seeded_regression C-014@11 step 5 proposal",
+}
+
 
 def load_jsonl(path: Path) -> list[dict[str, Any]]:
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
@@ -46,10 +73,9 @@ def build(source: Path = SOURCE) -> tuple[int, int]:
         items.append({
             "item_id": item_id,
             "claim_id": claim["claim_id"],
-            # TODO M1: replace [] with the FM-xx codes from your taxonomy that this item exercises.
-            "failure_modes": [],
+            "failure_modes": FAILURE_MODES.get(claim["claim_id"], []),
             "provenance": {"source": "lab8_public", "matrix_id": claim.get("matrix_id"),
-                           "from_trace": None, "generator": None,
+                           "from_trace": FROM_TRACE.get(claim["claim_id"]), "generator": None,
                            "label_by": "lab8_matrix", "checked_by": None},
             "split": "regression",
             "eval_set_version": VERSION,
