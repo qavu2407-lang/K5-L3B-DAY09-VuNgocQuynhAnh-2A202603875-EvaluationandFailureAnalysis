@@ -43,3 +43,24 @@ Card này đi kèm mỗi báo cáo và được dùng lại ở Day 10. Mọi co
   - Không đo trên người dùng thật. FM-09 (cross_principal) chưa có trace fail ở v1.
   - `reply_matches_ledger` chỉ bắt số tiền được viết ra; reply hứa "sẽ hoàn thêm" mà không nêu số thì chưa bắt được.
 - **Khi nào tăng eval-set version:** khi thêm item (từ trace case mới, adversarial pack ở v2), đổi nhãn (ví dụ sửa nhãn sai), hoặc đổi `failure_modes`; khi đó chạy lại baseline trên `main` và tăng `eval_set_version`. Cùng một version chỉ được siết ngưỡng (ratchet), không được nới.
+
+## v2 (Advanced / Expert)
+
+- **Run ID / eval set:** baseline `E-swarm-20261118-28dd` · eval set v2 sha `28dda14675a3` (28 item = 14 v1 + 14 adversarial, 140 trial) · metric_spec `2.0` · `config/fm_map.yaml` ánh xạ 8 cơ chế tấn công sang FM-02…FM-09, mỗi FM bị tấn công có ≥ 3 item.
+- **Ngưỡng chọn từ A/A:** `python -m lab9.mutation --aa 66,77,88,99,110` cho Δ = 0.0000 trên mọi metric (MockLLM tất định theo seed). Baseline `pass_hat_5` = 0.8929, `flaky_regression` = 0.5714, nên sàn `pass_hat_5` đặt ở **0.85**: ngoài dải nhiễu A/A, cao hơn mức 0.8 và chừa chỗ cho một item đổi kết quả.
+  - Với LLM thật, hai lần chạy cùng code vẫn khác nhau (sampling, provider đổi model ngầm), nên Δ của A/A > 0. Khi đó sàn phải nằm dưới baseline nhiều hơn biên nhiễu, nếu không gate chặn ngẫu nhiên cả PR trung thực.
+  - Chỉ dùng trung bình `pass_hat_5` là không đủ: baseline `swarm` có sẵn 3 item fail ở seed 55; một variant dựng trên `fixed` sửa 3 item đó nhưng hỏng 3 item khác ở 1/5 seed (`sum_parts`+`rare`, `quiet_override`+`rare`) vẫn cho đúng 0.8929. Vì vậy `pass_hat_5` có thêm `max_new_failing_trials: 0`: không trial (item@seed) nào pass ở main được fail ở PR. Phép kiểm này chỉ đúng vì MockLLM tất định; với LLM thật phải nới theo dải nhiễu A/A.
+- **Slice nào bắt lỗi nào:**
+
+| Variant | Trung bình pass_rate | Bị chặn bởi |
+|---|---|---|
+| `slice_regression` (cộng clause, seed lẻ) | 0.9357 (Δ −0.043, CI [−0.121, +0.029]: không chặn được) | `slice:money_movement` pass_rate và refund_amount_correct 0.85 < 0.95 (Δ −0.150, CI [−0.300, +0.000]); `pass_hat_5` (trial mới fail) |
+| `flaky_regression` (làm tròn 1/5 seed) | 0.9143 | `pass_hat_5` 0.5714, `pass_rate`, `slice:money_movement` |
+| `seeded_regression` | 0.6429 | mọi metric năng lực, FM-08, cả 4 slice |
+| lỗi nói sai số tiền (FM-08) | 1.0 | `reply_matches_ledger` |
+| `fixed`, `honest_refactor` | 1.0 | không chặn (merge) |
+
+  Scorecard `lab9.mutation`: 3/3 regression bị chặn, 0 báo nhầm.
+- **Chống gian lận (M7):** `integrity_check` từ chối so sánh report có metric NaN/inf, metric tổng không khớp rows, số dòng khác items × seeds, dòng trùng, tập (item, seed) khác baseline, `evaluator_failures` (kể cả trên run xanh), dòng thiếu giá trị grader, nhãn slice khác baseline; với `--base-spec`, ratchet chặn mọi ngưỡng bị nới, metric/slice bị bỏ, blocking hay `no_significant_drop` bị tắt. `lab9.traps`: 4/4 trap công khai bị chặn với lý do `INTEGRITY`.
+  - Trap còn có thể lọt: report mà rows đã bị sửa tay một cách nhất quán (đổi False thành True và tính lại metric). Gate chỉ đọc report nên không phân biệt được; cách chặn là để CI tự chạy `lab9.eval` thay vì tin report do PR nộp (như job `eval-gate` đang làm).
+- **Giới hạn cỡ mẫu:** một bug chỉ xuất hiện ở 1/3 seed (`rare` hiểu theo seed chia hết cho 3) chỉ chạm 1 trong 5 seed 11/22/33/44/55. Nếu bug nằm trên item mà baseline đã fail ở seed đó, hoặc trên seed không thuộc bộ 5 seed, gate không phát hiện ổn định. Không hạ ngưỡng để "bắt" nó; cần thêm seed hoặc thêm item.
