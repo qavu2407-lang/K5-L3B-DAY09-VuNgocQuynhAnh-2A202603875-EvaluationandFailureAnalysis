@@ -64,3 +64,20 @@ Card này đi kèm mỗi báo cáo và được dùng lại ở Day 10. Mọi co
 - **Chống gian lận (M7):** `integrity_check` từ chối so sánh report có metric NaN/inf, metric tổng không khớp rows, số dòng khác items × seeds, dòng trùng, tập (item, seed) khác baseline, `evaluator_failures` (kể cả trên run xanh), dòng thiếu giá trị grader, nhãn slice khác baseline; với `--base-spec`, ratchet chặn mọi ngưỡng bị nới, metric/slice bị bỏ, blocking hay `no_significant_drop` bị tắt. `lab9.traps`: 4/4 trap công khai bị chặn với lý do `INTEGRITY`.
   - Trap còn có thể lọt: report mà rows đã bị sửa tay một cách nhất quán (đổi False thành True và tính lại metric). Gate chỉ đọc report nên không phân biệt được; cách chặn là để CI tự chạy `lab9.eval` thay vì tin report do PR nộp (như job `eval-gate` đang làm).
 - **Giới hạn cỡ mẫu:** một bug chỉ xuất hiện ở 1/3 seed (`rare` hiểu theo seed chia hết cho 3) chỉ chạm 1 trong 5 seed 11/22/33/44/55. Nếu bug nằm trên item mà baseline đã fail ở seed đó, hoặc trên seed không thuộc bộ 5 seed, gate không phát hiện ổn định. Không hạ ngưỡng để "bắt" nó; cần thêm seed hoặc thêm item.
+
+## Bonus: port grader sang Inspect AI và so khớp
+
+- **Cách làm:** `src/lab9/inspect_port.py` viết lại 6 grader (`pass_rate`, `secret_leak`, `approval_bypass`, `refund_amount_correct`, `db_fact_kept`, `reply_matches_ledger`) thành `@scorer` của Inspect AI (`inspect-ai==0.3.291`, `requirements-bonus.txt`). Code viết mới theo API Inspect, không gọi lại `lab9.graders`, nên nếu hai bên lệch nhau thì một trong hai cài đặt bị sai. Mỗi (item, seed) là một `Sample`. Solver chạy cùng agent shape trên SQLite mới (`lab9.eval.make_task`) và không gọi model, nên `mockllm/model` chỉ để giữ chỗ. `max_samples=1` để giữ tính tất định như `lab9.eval`.
+- **Lệnh** (trong `src/`): `pip install -r requirements-bonus.txt && python -m lab9.inspect_port --report reports/baseline_v1.json --report reports/eval_fixed.json --report reports/eval_seeded_regression.json --report reports/baseline_v2.json --report reports/eval_slice_regression.json`
+- **Kết quả:** khớp **2.520/2.520** ô (item × seed × metric) và khớp mọi metric tổng (`aggregate`) trên cả 5 report; exit 0.
+
+| Report | Trial | Ô so khớp | Kết quả |
+|---|---|---|---|
+| `E-swarm-20261118-430d` | 70 | 420 | MATCH |
+| `E-fixed-20261118-430d` | 70 | 420 | MATCH |
+| `E-seeded_regression-20261118-430d` | 70 | 420 | MATCH |
+| `E-swarm-20261118-28dd` (v2) | 140 | 840 | MATCH |
+| `E-slice_regression-20261118-28dd` (v2) | 140 | 840 | MATCH |
+
+- **Kiểm chứng phép so không rỗng:** lật một ô (`E-003@44 reply_matches_ledger`) trong bản sao report thì script báo `1 DIFF` và exit 1.
+- **Giới hạn:** chỉ so phần grader. Agent run và nhãn dùng chung với `lab9.eval`, nên lỗi nằm trong harness (ví dụ `ledger_snapshot` đọc sai) sẽ không lộ ra. `cost_per_success` không so vì không phải grader. Inspect AI không nằm trong CI, vì `requirements-lab9.txt` giữ nguyên để job `eval-gate` không đổi.
