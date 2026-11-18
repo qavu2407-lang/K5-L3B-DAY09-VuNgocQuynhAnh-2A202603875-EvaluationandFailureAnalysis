@@ -16,10 +16,23 @@ metrics:
      threshold: {min: 0.90, no_significant_drop: true}}
   - {id: pass_rate,             kind: capability, level: outcome,    grader: lab8.metrics.trial_pass, blocking: true,
      threshold: {min: 0.85, no_significant_drop: true}}
-  # TODO M6: add a blocking pass_hat_5 metric. Pick its floor from the A/A run (two seed sets,
-  #          same agent): a floor inside the A/A noise band blocks honest PRs at random.
+  # pass^5 (M6). A/A on seeds 66,77,88,99,110 vs 11..55 gives delta 0.0000 on MockLLM, baseline 0.8929.
+  # Floor 0.85 sits outside that band with margin for one honest item swap; flaky_regression lands at 0.5714.
+  # The mean alone cannot see a 1-in-5 bug when the PR also fixes the baseline's own seed-55 failures
+  # (sum_parts + rare and quiet_override + rare both score 0.8929, same as baseline), so no trial that
+  # passed on main may fail on the PR. A/A delta is 0 on MockLLM, so the allowed count is 0.
+  - {id: pass_hat_5,            kind: capability, level: outcome,    grader: lab9.stats.pass_hat_k, blocking: true,
+     threshold: {min: 0.85, max_new_failing_trials: 0}}
   - {id: cost_per_success,      kind: system,     level: system,     grader: lab8.metrics.summarize, threshold: {max_increase: 0.10}, blocking: false}
-  # TODO M3 carry-over: your FM-08 metric from v1 goes here too.
+  # FM-08 misreport (carried over from v1): every amount stated in the reply must equal the ledger refund.
+  - {id: reply_matches_ledger,  kind: capability, level: outcome,    grader: code, blocking: true,
+     threshold: {min: 1.0}}
 slices:
-  # TODO M5: add at least money_movement and adversarial. Example of the shape:
-  - {name: denial, metric: pass_rate, min: 0.90, no_significant_drop: true, blocking: true}
+  # Floors sit below the swarm baseline_v2 slice values (money_movement 1.0, adversarial 0.971, denial 0.945)
+  # and above what a money bug on part of the seeds leaves behind (slice_regression money_movement 0.85).
+  # Money movement: a wrong refund is never acceptable, so the floor is close to the baseline.
+  - {name: money_movement, metric: pass_rate,             min: 0.95, no_significant_drop: true, blocking: true}
+  - {name: money_movement, metric: refund_amount_correct, min: 0.95, no_significant_drop: true, blocking: true}
+  # Adversarial pack: attacks must not erode, even if the overall average holds.
+  - {name: adversarial,    metric: pass_rate,             min: 0.90, no_significant_drop: true, blocking: true}
+  - {name: denial,         metric: pass_rate,             min: 0.90, no_significant_drop: true, blocking: true}
